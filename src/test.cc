@@ -7,7 +7,21 @@
 // Maybe helpful:
 // https://github.com/revel8n/altivec-archc/tree/master/t
 
-#define XENIA
+// #define XENIA
+
+#ifdef LIBXENON
+#include <console/console.h>
+#include <debug.h>
+#include <dirent.h>
+#include <elf/elf.h>
+#include <input/input.h>
+#include <network/network.h>
+#include <ppc/timebase.h>
+#include <sys/iosupport.h>
+#include <time/time.h>
+#include <xenon_soc/xenon_power.h>
+#include <xenos/xenos.h>
+#endif
 
 // Debug print helper.
 void DebugPrint(const char *string, int length) {
@@ -89,16 +103,11 @@ bool float_nan() {
   volatile float f1 = NAN;
   volatile float f2 = NAN;
 
-  /*
   if (f1 != f2) {
     return true;
   }
 
   return false;
-  */
-
-  // FIXME: Xenia doesn't track NaN atm. Abort the test.
-  return true;
 }
 
 bool float_fabs() {
@@ -112,6 +121,7 @@ bool float_sqrt() {
 }
 
 // https://github.com/dolphin-emu/hwtests/tree/master/cputest
+// VERIFIED WITH HARDWARE!
 static bool FctiwzTest() {
   uint64_t values[][2] = {
       // input               expected output
@@ -120,13 +130,13 @@ static bool FctiwzTest() {
       {0x0000000000000001, 0x0000000000000000},  // smallest positive subnormal
       {0x000fffffffffffff, 0x0000000000000000},  // largest subnormal
       {0x3ff0000000000000, 0x0000000000000001},  // +1
-      {0xbff0000000000000, 0x00000000ffffffff},  // -1
-      {0xc1e0000000000000, 0x0000000080000000},  // -(2^31)
+      {0xbff0000000000000, 0xffffffffffffffff},  // -1
+      {0xc1e0000000000000, 0xffffffff80000000},  // -(2^31)
       {0x41dfffffffc00000, 0x000000007fffffff},  // 2^31 - 1
       {0x7ff0000000000000, 0x000000007fffffff},  // +infinity
-      {0xfff0000000000000, 0x0000000080000000},  // -infinity
-      {0xfff8000000000000, 0x0000000080000000},  // a QNaN
-      {0xfff4000000000000, 0x0000000080000000},  // a SNaN
+      {0xfff0000000000000, 0xffffffff80000000},  // -infinity
+      {0xfff8000000000000, 0xffffffff80000000},  // a QNaN
+      {0xfff4000000000000, 0xffffffff80000000},  // a SNaN
   };
 
   bool success = true;
@@ -151,6 +161,7 @@ static bool FctiwzTest() {
 }
 
 // https://github.com/dolphin-emu/hwtests/tree/master/cputest
+// VERIFIED WITH HARDWARE!
 static bool FrspTest() {
   // clang-format off
   uint64_t values[][3] = {
@@ -161,11 +172,11 @@ static bool FrspTest() {
     {0x000fffffffffffff, 0x0000000000000000, 0b000}, // largest double subnormal
     {0x3690000000000000, 0x0000000000000000, 0b000}, // largest number rounded to zero
     {0x3690000000000001, 0x36a0000000000000, 0b000}, // smallest positive single subnormal
-    {0x380fffffffffffff, 0x0000000000000000, 0b100}, // largest single subnormal
+    {0x380fffffffffffff, 0x3810000000000000, 0b100}, // largest single subnormal
     {0x3810000000000000, 0x3810000000000000, 0b100}, // smallest positive single normal
     {0x7ff0000000000000, 0x7ff0000000000000, 0b000}, // +infinity
     {0xfff0000000000000, 0xfff0000000000000, 0b000}, // -infinity
-    {0xfff7ffffffffffff, 0xfff7ffffe0000000, 0b000}, // a SNaN
+    {0xfff7ffffffffffff, 0xffffffffe0000000, 0b000}, // a SNaN
     {0xffffffffffffffff, 0xffffffffe0000000, 0b000}, // a QNaN
   };
   // clang-format on
@@ -227,7 +238,21 @@ extern "C" int _start() {
 #else
 int main() {
 #endif
-  DebugPrint("Beginning tests in guest code.\n");
+
+#ifdef LIBXENON
+  // Setup the console.
+  if (!xenos_is_initialized()) {
+    xenos_init(VIDEO_MODE_AUTO);
+  }
+  console_init();
+
+  xenon_make_it_faster(XENON_SPEED_FULL);
+
+  network_init();
+  network_print_config();
+  delay(5);
+#endif
+  DebugPrint("Beginning tests.\n");
 
   char buff[1024];
   int failed = 0;
@@ -256,5 +281,8 @@ int main() {
     DebugPrint("All tests succeeded!\n");
   }
 
+#ifdef LIBXENON
+  delay(10);
+#endif
   return 0;
 }
